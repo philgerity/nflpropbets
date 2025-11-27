@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h2>Upcoming Games</h2>
+
+{% if not games %}
+<p>No games scheduled yet. Ask the Admin to add some!</p>
+{% endif %}
+
+<div class="grid">
+    {% for game in games %}
+    <article>
+        <header>
+            <strong>{{ game.home_team }} vs {{ game.away_team }}</strong>
+        </header>
+        <p>Date: {{ game.game_date }}</p>
+        <footer>
+            <a role="button" href="{{ url_for('game', game_id=game['id']) }}">View Bets</a>
+        </footer>
+    </article>
+    {% endfor %}
+</div>
+{% endblock %}

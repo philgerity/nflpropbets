@@ -1,0 +1,92 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h2>Admin Dashboard</h2>
+
+<details>
+    <summary role="button" class="secondary">Add New Game</summary>
+    <form method="post">
+        <input type="hidden" name="action" value="add_game">
+        <div class="grid">
+            <label>
+                Home Team
+                <input type="text" name="home_team" required>
+            </label>
+            <label>
+                Away Team
+                <input type="text" name="away_team" required>
+            </label>
+        </div>
+        <label>
+            Date/Time
+            <input type="text" name="game_date" placeholder="e.g., Sunday 1:00 PM" required>
+        </label>
+        <button type="submit">Add Game</button>
+    </form>
+</details>
+
+<hr>
+
+<h3>Manage Games & Props</h3>
+
+{% for game in games %}
+<article>
+    <header>
+        <strong>{{ game.home_team }} vs {{ game.away_team }}</strong> ({{ game.game_date }})
+        <form method="post" style="display:inline; float:right;">
+             <input type="hidden" name="action" value="delete_game">
+             <input type="hidden" name="game_id" value="{{ game['id'] }}">
+             <button type="submit" class="outline contrast" style="padding: 2px 10px; font-size: 0.8em;">Delete</button>
+        </form>
+    </header>
+    
+    <!-- Add Prop Form -->
+    <form method="post" style="margin-top: 1rem;">
+        <input type="hidden" name="action" value="add_prop">
+        <input type="hidden" name="game_id" value="{{ game['id'] }}">
+        <div class="grid">
+            <input type="text" name="description" placeholder="New Prop Question (e.g. Total Points > 45?)" required>
+            <button type="submit" class="outline">Add Prop</button>
+        </div>
+    </form>
+
+    <!-- List Existing Props for Resolution -->
+    <table role="grid">
+        <thead>
+            <tr>
+                <th>Prop</th>
+                <th>Result</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for prop in props %}
+                {% if prop['home_team'] == game['home_team'] and prop['away_team'] == game['away_team'] %}
+                <tr>
+                    <td>{{ prop['description'] }}</td>
+                    <td>
+                        {% if prop['result'] %}
+                            <strong>{{ prop['result'] }}</strong>
+                        {% else %}
+                            <em>Pending</em>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <form method="post" style="margin:0;">
+                            <input type="hidden" name="action" value="resolve_prop">
+                            <input type="hidden" name="prop_id" value="{{ prop['id'] }}">
+                            <div class="grid">
+                                <button type="submit" name="result" value="Yes" style="background-color: green; border-color: green; padding: 5px;">Yes</button>
+                                <button type="submit" name="result" value="No" style="background-color: red; border-color: red; padding: 5px;">No</button>
+                            </div>
+                        </form>
+                    </td>
+                </tr>
+                {% endif %}
+            {% endfor %}
+        </tbody>
+    </table>
+</article>
+{% endfor %}
+
+{% endblock %}

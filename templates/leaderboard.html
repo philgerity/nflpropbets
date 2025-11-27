@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h2>Leaderboard</h2>
+
+{% if not leaderboard %}
+<p>No bets settled yet!</p>
+{% else %}
+<table role="grid">
+    <thead>
+        <tr>
+            <th>Rank</th>
+            <th>Name</th>
+            <th>Score</th>
+            <th>Total Bets</th>
+            <th>Accuracy</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for entry in leaderboard %}
+        <tr>
+            <td>{{ loop.index }}</td>
+            <td><strong>{{ entry.name }}</strong></td>
+            <td>{{ entry.score }}</td>
+            <td>{{ entry.total }}</td>
+            <td>{{ entry.percentage }}%</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+
+{% endblock %}

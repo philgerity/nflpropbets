@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Family Prop Bets</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
+  <style>
+      /* Simple overrides */
+      nav { margin-bottom: 2rem; border-bottom: 1px solid #333; padding-bottom: 1rem; }
+      .container { max-width: 800px; }
+      .bet-card { border: 1px solid #333; padding: 1rem; margin-bottom: 1rem; border-radius: 8px; }
+      .won { color: green; font-weight: bold; }
+      .lost { color: red; }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <nav>
+      <ul>
+        <li><strong>Prop Bets App</strong></li>
+      </ul>
+      <ul>
+        <li><a href="/">Games</a></li>
+        <li><a href="/leaderboard">Leaderboard</a></li>
+        <li><a href="/admin">Admin</a></li>
+      </ul>
+    </nav>
+    
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        {% for message in messages %}
+          <article style="background-color: #3d5a40; color: white;">{{ message }}</article>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

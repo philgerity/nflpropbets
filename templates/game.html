@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<a href="/">&larr; Back to Games</a>
+<h2>{{ game.home_team }} vs {{ game.away_team }}</h2>
+<p>{{ game.game_date }}</p>
+
+<h3>Place Your Bets</h3>
+
+{% if not props %}
+<p>No props available for this game yet.</p>
+{% else %}
+    {% for prop in props %}
+    <div class="bet-card">
+        <h4>{{ prop.description }}</h4>
+        {% if prop.result %}
+            <p><strong>Result:</strong> {{ prop.result }}</p>
+        {% else %}
+            <form method="post" action="{{ url_for('place_bet') }}">
+                <input type="hidden" name="prop_id" value="{{ prop['id'] }}">
+                <input type="hidden" name="game_id" value="{{ game['id'] }}">
+                
+                <div class="grid">
+                    <label>
+                        Your Name
+                        <input type="text" name="user_name" required placeholder="e.g. Mom">
+                    </label>
+                    <label>
+                        Your Prediction
+                        <select name="selection">
+                            <option value="Yes">Yes</option>
+                            <option value="No">No</option>
+                        </select>
+                    </label>
+                </div>
+                <button type="submit">Place Bet</button>
+            </form>
+        {% endif %}
+    </div>
+    {% endfor %}
+{% endif %}
+
+{% endblock %}
