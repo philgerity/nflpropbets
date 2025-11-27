@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, flash
 import sqlite3
+from espn_sync import sync_games
 
 app = Flask(__name__)
 app.secret_key = 'super_secret_key_for_simple_app'
@@ -15,7 +16,48 @@ def index():
     conn = get_db_connection()
     games = conn.execute('SELECT * FROM games ORDER BY game_date').fetchall()
     conn.close()
-    return render_template('index.html', games=games)
+    
+    # Group games by day of week
+    from collections import defaultdict
+    from datetime import datetime
+    import dateutil.parser
+    
+    games_by_day = defaultdict(list)
+    
+    for game in games:
+        # Parse the date to extract day of week
+        # The game_date from ESPN is formatted like "Thu 8:20 PM"
+        try:
+            # Try to parse the date - we'll group by the day name prefix
+            day_name = game['game_date'].split()[0]  # e.g., "Thu", "Sun"
+            games_by_day[day_name].append(game)
+        except:
+            # If parsing fails, put in "Unknown" group
+            games_by_day['Unknown'].append(game)
+    
+    # Define day order for sorting - Thu, Fri, Sun, Mon
+    day_order = {'Thu': 1, 'Fri': 2, 'Sat': 3, 'Sun': 4, 'Mon': 5, 'Tue': 6, 'Wed': 7}
+    
+    # Sort the days
+    sorted_days = sorted(games_by_day.keys(), key=lambda x: day_order.get(x, 99))
+    
+    return render_template('index.html', games_by_day=games_by_day, sorted_days=sorted_days)
+
+@app.route('/sync')
+def sync_route():
+    conn = get_db_connection()
+    success, msg = sync_games(conn)
+    conn.close()
+    if success:
+        flash('Successfully synced with ESPN!')
+    else:
+        flash(f'Error syncing: {msg}')
+    
+    # Check if we should redirect back to a specific game
+    redirect_game = request.args.get('redirect_game')
+    if redirect_game:
+        return redirect(url_for('game', game_id=redirect_game))
+    return redirect(url_for('index'))
 
 @app.route('/admin', methods=('GET', 'POST'))
 def admin():
@@ -24,16 +66,7 @@ def admin():
     if request.method == 'POST':
         action = request.form.get('action')
         
-        if action == 'add_game':
-            home = request.form['home_team']
-            away = request.form['away_team']
-            date = request.form['game_date']
-            conn.execute('INSERT INTO games (home_team, away_team, game_date) VALUES (?, ?, ?)',
-                         (home, away, date))
-            conn.commit()
-            flash('Game added!')
-            
-        elif action == 'add_prop':
+        if action == 'add_prop':
             game_id = request.form['game_id']
             description = request.form['description']
             conn.execute('INSERT INTO props (game_id, description) VALUES (?, ?)',
@@ -43,22 +76,24 @@ def admin():
 
         elif action == 'resolve_prop':
             prop_id = request.form['prop_id']
-            result = request.form['result'] # 'Yes' or 'No'
-            conn.execute('UPDATE props SET result = ? WHERE id = ?', (result, prop_id))
+            result = request.form['result']
+            # If reset, set to NULL, otherwise set to Yes/No
+            if result == 'Reset':
+                conn.execute('UPDATE props SET result = NULL WHERE id = ?', (prop_id,))
+                flash('Prop reset to pending!')
+            else:
+                conn.execute('UPDATE props SET result = ? WHERE id = ?', (result, prop_id))
+                flash('Prop resolved!')
             conn.commit()
-            flash('Prop resolved!')
             
         elif action == 'delete_game':
              game_id = request.form['game_id']
              conn.execute('DELETE FROM games WHERE id = ?', (game_id,))
-             # Should probably cascade delete props and bets but keeping it simple
              conn.commit()
              flash('Game deleted')
 
     games = conn.execute('SELECT * FROM games ORDER BY game_date').fetchall()
     
-    # Fetch props for all games to show in a resolution list
-    # We join with games to show "Game: Prop Description"
     props = conn.execute('''
         SELECT props.id, props.description, props.result, games.home_team, games.away_team 
         FROM props 
@@ -66,48 +101,99 @@ def admin():
         ORDER BY games.game_date
     ''').fetchall()
     
+    # Group games by day of week (same logic as index)
+    from collections import defaultdict
+    games_by_day = defaultdict(list)
+    
+    for game in games:
+        try:
+            day_name = game['game_date'].split()[0]
+            games_by_day[day_name].append(game)
+        except:
+            games_by_day['Unknown'].append(game)
+    
+    # Define day order - Thu, Fri, Sun, Mon
+    day_order = {'Thu': 1, 'Fri': 2, 'Sat': 3, 'Sun': 4, 'Mon': 5, 'Tue': 6, 'Wed': 7}
+    sorted_days = sorted(games_by_day.keys(), key=lambda x: day_order.get(x, 99))
+    
     conn.close()
-    return render_template('admin.html', games=games, props=props)
+    return render_template('admin.html', games_by_day=games_by_day, sorted_days=sorted_days, props=props)
+
+@app.route('/admin/users', methods=('GET', 'POST'))
+def manage_users():
+    conn = get_db_connection()
+    
+    if request.method == 'POST':
+        if 'add_user' in request.form:
+            name = request.form['name']
+            if name:
+                try:
+                    conn.execute('INSERT INTO users (name) VALUES (?)', (name,))
+                    conn.commit()
+                    flash(f'User {name} added.')
+                except sqlite3.IntegrityError:
+                    flash('User already exists.')
+        elif 'delete_user' in request.form:
+            user_id = request.form['user_id']
+            conn.execute('DELETE FROM users WHERE id = ?', (user_id,))
+            conn.commit()
+            flash('User deleted.')
+            
+    users = conn.execute('SELECT * FROM users').fetchall()
+    conn.close()
+    return render_template('users.html', users=users)
 
 @app.route('/game/<int:game_id>')
 def game(game_id):
     conn = get_db_connection()
     game = conn.execute('SELECT * FROM games WHERE id = ?', (game_id,)).fetchone()
     props = conn.execute('SELECT * FROM props WHERE game_id = ?', (game_id,)).fetchall()
+    users = conn.execute('SELECT * FROM users').fetchall()
     
-    # We might want to see who bet what? Or just list props?
-    # For simplicity, just list props and a form to bet.
+    # Get bets for each prop with user information
+    bets = conn.execute('''
+        SELECT bets.prop_id, bets.selection, users.name
+        FROM bets
+        JOIN users ON bets.user_id = users.id
+        WHERE bets.prop_id IN (SELECT id FROM props WHERE game_id = ?)
+    ''', (game_id,)).fetchall()
+    
+    # Organize bets by prop_id
+    bets_by_prop = {}
+    for bet in bets:
+        prop_id = bet['prop_id']
+        if prop_id not in bets_by_prop:
+            bets_by_prop[prop_id] = []
+        bets_by_prop[prop_id].append({'name': bet['name'], 'selection': bet['selection']})
     
     conn.close()
     if game is None:
         return "Game not found", 404
-    return render_template('game.html', game=game, props=props)
+    return render_template('game.html', game=game, props=props, users=users, bets_by_prop=bets_by_prop)
 
 @app.route('/place_bet', methods=['POST'])
 def place_bet():
     prop_id = request.form['prop_id']
     game_id = request.form['game_id']
-    user_name = request.form['user_name']
-    selection = request.form['selection'] # 'Yes' or 'No'
+    user_id = request.form['user_id']
+    selection = request.form['selection']
     
-    if not user_name:
-        flash('Please enter your name!')
+    if not user_id:
+        flash('Please select a user!')
         return redirect(url_for('game', game_id=game_id))
 
     conn = get_db_connection()
     
-    # Check if user already bet on this prop? Maybe. 
-    # For now, let's just insert. If they bet twice, they bet twice. 
-    # Or we can enforce one bet per user per prop.
-    existing_bet = conn.execute('SELECT * FROM bets WHERE prop_id = ? AND user_name = ?', (prop_id, user_name)).fetchone()
+    # Check for existing bet
+    existing_bet = conn.execute('SELECT * FROM bets WHERE prop_id = ? AND user_id = ?', (prop_id, user_id)).fetchone()
     
     if existing_bet:
         conn.execute('UPDATE bets SET selection = ? WHERE id = ?', (selection, existing_bet['id']))
-        flash(f'Updated bet for {user_name} on this prop.')
+        flash(f'Updated bet.')
     else:
-        conn.execute('INSERT INTO bets (prop_id, user_name, selection) VALUES (?, ?, ?)',
-                     (prop_id, user_name, selection))
-        flash(f'Bet placed for {user_name}!')
+        conn.execute('INSERT INTO bets (prop_id, user_id, selection) VALUES (?, ?, ?)',
+                     (prop_id, user_id, selection))
+        flash(f'Bet placed!')
     
     conn.commit()
     conn.close()
@@ -118,41 +204,39 @@ def place_bet():
 def leaderboard():
     conn = get_db_connection()
     
-    # Get all bets joined with their prop result
-    # We only care about resolved props
+    # Updated query to join users table
     results = conn.execute('''
-        SELECT bets.user_name, bets.selection, props.result
+        SELECT users.name, bets.selection, props.result
         FROM bets
         JOIN props ON bets.prop_id = props.id
+        JOIN users ON bets.user_id = users.id
         WHERE props.result IS NOT NULL
     ''').fetchall()
     
     scores = {}
     total_bets = {}
     
+    # Initialize all users with 0
+    all_users = conn.execute('SELECT name FROM users').fetchall()
+    for user_row in all_users:
+        scores[user_row['name']] = 0
+        total_bets[user_row['name']] = 0
+    
     for row in results:
-        user = row['user_name']
-        if user not in scores:
-            scores[user] = 0
-            total_bets[user] = 0
-        
+        user = row['name']
         total_bets[user] += 1
         if row['selection'] == row['result']:
             scores[user] += 1
             
-    # Convert to list for sorting
     leaderboard_data = []
-    # Include users who have placed bets but maybe none resolved yet? 
-    # The query above only gets resolved ones. 
-    # Let's do a separate query to find all unique users if we want to show 0-0 records.
-    # For now, sticking to the query above is simple enough.
     
     for user, score in scores.items():
+        total = total_bets[user]
         leaderboard_data.append({
             'name': user,
             'score': score,
-            'total': total_bets[user],
-            'percentage': int((score / total_bets[user]) * 100) if total_bets[user] > 0 else 0
+            'total': total,
+            'percentage': int((score / total) * 100) if total > 0 else 0
         })
     
     leaderboard_data.sort(key=lambda x: x['score'], reverse=True)
@@ -161,4 +245,4 @@ def leaderboard():
     return render_template('leaderboard.html', leaderboard=leaderboard_data)
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.0', port=5001)

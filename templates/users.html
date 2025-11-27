@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="grid">
+    <div><h2>Users</h2></div>
+    <div style="text-align: right;">
+        <a role="button" class="secondary" href="/admin">Back to Admin</a>
+    </div>
+</div>
+
+<article>
+    <header>Add New User</header>
+    <form method="post">
+        <input type="hidden" name="add_user" value="true">
+        <div class="grid">
+            <input type="text" name="name" placeholder="Name (e.g. Dad)" required>
+            <button type="submit">Add User</button>
+        </div>
+    </form>
+</article>
+
+<h3>Existing Users</h3>
+{% if not users %}
+<p>No users yet.</p>
+{% else %}
+<table role="grid">
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Action</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for user in users %}
+        <tr>
+            <td>{{ user.name }}</td>
+            <td>
+                <form method="post" style="margin:0;">
+                    <input type="hidden" name="delete_user" value="true">
+                    <input type="hidden" name="user_id" value="{{ user.id }}">
+                    <button type="submit" class="outline contrast" style="padding: 5px 10px;">Delete</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+
+{% endblock %}

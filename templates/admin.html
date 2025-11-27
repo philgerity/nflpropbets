@@ -3,43 +3,30 @@
 {% block content %}
 <h2>Admin Dashboard</h2>
 
-<details>
-    <summary role="button" class="secondary">Add New Game</summary>
-    <form method="post">
-        <input type="hidden" name="action" value="add_game">
-        <div class="grid">
-            <label>
-                Home Team
-                <input type="text" name="home_team" required>
-            </label>
-            <label>
-                Away Team
-                <input type="text" name="away_team" required>
-            </label>
-        </div>
-        <label>
-            Date/Time
-            <input type="text" name="game_date" placeholder="e.g., Sunday 1:00 PM" required>
-        </label>
-        <button type="submit">Add Game</button>
-    </form>
-</details>
+<div class="grid">
+    <a role="button" href="/admin/users" class="secondary">Manage Users</a>
+    <a role="button" href="/sync" class="contrast">Sync Games</a>
+</div>
 
 <hr>
 
-<h3>Manage Games & Props</h3>
+<h3>Manage Props</h3>
 
-{% for game in games %}
+{% for day in sorted_days %}
+<h4>{{ day }}</h4>
+{% for game in games_by_day[day] %}
 <article>
     <header>
-        <strong>{{ game.home_team }} vs {{ game.away_team }}</strong> ({{ game.game_date }})
+        <strong>{{ game.home_team }} vs {{ game.away_team }}</strong>
+        <br>
+        <small>{{ game.game_date }} | {{ game.status }}</small>
         <form method="post" style="display:inline; float:right;">
-             <input type="hidden" name="action" value="delete_game">
-             <input type="hidden" name="game_id" value="{{ game['id'] }}">
-             <button type="submit" class="outline contrast" style="padding: 2px 10px; font-size: 0.8em;">Delete</button>
+            <input type="hidden" name="action" value="delete_game">
+            <input type="hidden" name="game_id" value="{{ game['id'] }}">
+            <button type="submit" class="outline contrast" style="padding: 2px 10px; font-size: 0.8em;">Delete</button>
         </form>
     </header>
-    
+
     <!-- Add Prop Form -->
     <form method="post" style="margin-top: 1rem;">
         <input type="hidden" name="action" value="add_prop">
@@ -61,32 +48,37 @@
         </thead>
         <tbody>
             {% for prop in props %}
-                {% if prop['home_team'] == game['home_team'] and prop['away_team'] == game['away_team'] %}
-                <tr>
-                    <td>{{ prop['description'] }}</td>
-                    <td>
-                        {% if prop['result'] %}
-                            <strong>{{ prop['result'] }}</strong>
-                        {% else %}
-                            <em>Pending</em>
-                        {% endif %}
-                    </td>
-                    <td>
-                        <form method="post" style="margin:0;">
-                            <input type="hidden" name="action" value="resolve_prop">
-                            <input type="hidden" name="prop_id" value="{{ prop['id'] }}">
-                            <div class="grid">
-                                <button type="submit" name="result" value="Yes" style="background-color: green; border-color: green; padding: 5px;">Yes</button>
-                                <button type="submit" name="result" value="No" style="background-color: red; border-color: red; padding: 5px;">No</button>
-                            </div>
-                        </form>
-                    </td>
-                </tr>
-                {% endif %}
+            {% if prop['home_team'] == game['home_team'] and prop['away_team'] == game['away_team'] %}
+            <tr>
+                <td>{{ prop['description'] }}</td>
+                <td>
+                    {% if prop['result'] %}
+                    <strong>{{ prop['result'] }}</strong>
+                    {% else %}
+                    <em>Pending</em>
+                    {% endif %}
+                </td>
+                <td>
+                    <form method="post" style="margin:0;">
+                        <input type="hidden" name="action" value="resolve_prop">
+                        <input type="hidden" name="prop_id" value="{{ prop['id'] }}">
+                        <div style="display: flex; gap: 0.25rem;">
+                            <button type="submit" name="result" value="Yes"
+                                style="background-color: green; border-color: green; padding: 0.25rem 0.5rem; font-size: 0.75rem; flex: 1;">Yes</button>
+                            <button type="submit" name="result" value="No"
+                                style="background-color: red; border-color: red; padding: 0.25rem 0.5rem; font-size: 0.75rem; flex: 1;">No</button>
+                            <button type="submit" name="result" value="Reset" class="outline"
+                                style="padding: 0.25rem 0.5rem; font-size: 0.75rem; flex: 1;">Reset</button>
+                        </div>
+                    </form>
+                </td>
+            </tr>
+            {% endif %}
             {% endfor %}
         </tbody>
     </table>
 </article>
+{% endfor %}
 {% endfor %}
 
 {% endblock %}

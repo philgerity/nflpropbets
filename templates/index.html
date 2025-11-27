@@ -1,23 +1,51 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<h2>Upcoming Games</h2>
-
-{% if not games %}
-<p>No games scheduled yet. Ask the Admin to add some!</p>
-{% endif %}
-
 <div class="grid">
-    {% for game in games %}
-    <article>
-        <header>
-            <strong>{{ game.home_team }} vs {{ game.away_team }}</strong>
-        </header>
-        <p>Date: {{ game.game_date }}</p>
-        <footer>
-            <a role="button" href="{{ url_for('game', game_id=game['id']) }}">View Bets</a>
-        </footer>
-    </article>
-    {% endfor %}
+    <div>
+        <h2>Upcoming Games</h2>
+    </div>
+    <div style="text-align: right;">
+        <a role="button" class="contrast" href="/sync">Sync ESPN Data</a>
+    </div>
 </div>
+
+{% if not games_by_day or games_by_day|length == 0 %}
+<p>No games found. Try syncing!</p>
+{% else %}
+{% for day in sorted_days %}
+<h3>{{ day }}</h3>
+<table role="grid">
+    <thead>
+        <tr>
+            <th style="white-space: nowrap;">Time</th>
+            <th>Matchup</th>
+            <th style="white-space: nowrap;">Status</th>
+            <th style="white-space: nowrap;">Score</th>
+            <th style="text-align: center; white-space: nowrap;">Action</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for game in games_by_day[day] %}
+        <tr>
+            <td style="white-space: nowrap;">{{ game.game_date }}</td>
+            <td><strong>{{ game.away_team }}</strong> @ <strong>{{ game.home_team }}</strong></td>
+            <td style="white-space: nowrap;"><small>{{ game.status }}</small></td>
+            <td style="white-space: nowrap;">
+                {% if game.status != 'Scheduled' %}
+                <strong>{{ game.away_score }} - {{ game.home_score }}</strong>
+                {% else %}
+                -
+                {% endif %}
+            </td>
+            <td style="text-align: center; white-space: nowrap;">
+                <a role="button" href="{{ url_for('game', game_id=game['id']) }}" class="outline"
+                    style="margin: 0; padding: 0.25rem 0.5rem; font-size: 0.875rem;">View Bets</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endfor %}
+{% endif %}
 {% endblock %}

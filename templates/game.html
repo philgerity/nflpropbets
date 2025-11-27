@@ -1,43 +1,83 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<a href="/">&larr; Back to Games</a>
-<h2>{{ game.home_team }} vs {{ game.away_team }}</h2>
-<p>{{ game.game_date }}</p>
+<div class="grid">
+    <div>
+        <a href="/">&larr; Back to Games</a>
+        <h2>{{ game.home_team }} vs {{ game.away_team }}</h2>
+    </div>
+    <div style="text-align: right;">
+        <a role="button" class="outline" href="/sync?redirect_game={{ game.id }}">Refresh Game</a>
+    </div>
+</div>
+<p>
+    {{ game.game_date }}<br>
+    <strong>Status:</strong> {{ game.status }}<br>
+    <strong>Score:</strong> {{ game.home_team }} {{ game.home_score }} - {{ game.away_team }} {{ game.away_score }}
+    {% if game.quarter %} (Q{{ game.quarter }} {{ game.clock }}){% endif %}
+</p>
 
 <h3>Place Your Bets</h3>
 
 {% if not props %}
 <p>No props available for this game yet.</p>
 {% else %}
-    {% for prop in props %}
-    <div class="bet-card">
-        <h4>{{ prop.description }}</h4>
-        {% if prop.result %}
-            <p><strong>Result:</strong> {{ prop.result }}</p>
-        {% else %}
-            <form method="post" action="{{ url_for('place_bet') }}">
-                <input type="hidden" name="prop_id" value="{{ prop['id'] }}">
-                <input type="hidden" name="game_id" value="{{ game['id'] }}">
-                
-                <div class="grid">
-                    <label>
-                        Your Name
-                        <input type="text" name="user_name" required placeholder="e.g. Mom">
-                    </label>
-                    <label>
-                        Your Prediction
-                        <select name="selection">
-                            <option value="Yes">Yes</option>
-                            <option value="No">No</option>
-                        </select>
-                    </label>
-                </div>
-                <button type="submit">Place Bet</button>
-            </form>
-        {% endif %}
-    </div>
-    {% endfor %}
+{% for prop in props %}
+<article>
+    <h4>{{ prop.description }}</h4>
+
+    {% if prop.result %}
+    <p><strong>Result:</strong> {{ prop.result }}</p>
+    {% else %}
+    <form method="post" action="{{ url_for('place_bet') }}">
+        <input type="hidden" name="prop_id" value="{{ prop['id'] }}">
+        <input type="hidden" name="game_id" value="{{ game['id'] }}">
+
+        <div class="grid">
+            <label>
+                Select User
+                <select name="user_id" required>
+                    <option value="" disabled selected>Select your name...</option>
+                    {% for user in users %}
+                    <option value="{{ user.id }}">{{ user.name }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>
+                Your Prediction
+                <select name="selection">
+                    <option value="Yes">Yes</option>
+                    <option value="No">No</option>
+                </select>
+            </label>
+        </div>
+        <button type="submit">Place Bet</button>
+    </form>
+    {% endif %}
+
+    <!-- Show who has placed bets -->
+    {% if bets_by_prop.get(prop['id']) %}
+    <hr>
+    <h5>Current Bets:</h5>
+    <table role="grid">
+        <thead>
+            <tr>
+                <th>User</th>
+                <th>Prediction</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for bet in bets_by_prop[prop['id']] %}
+            <tr>
+                <td>{{ bet['name'] }}</td>
+                <td><strong>{{ bet['selection'] }}</strong></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+</article>
+{% endfor %}
 {% endif %}
 
 {% endblock %}
