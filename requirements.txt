@@ -2,4 +2,3 @@ flask
 requests
 python-dateutil
 gunicorn
-psycopg2-binary

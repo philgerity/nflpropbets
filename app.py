@@ -6,22 +6,25 @@ from espn_sync import sync_games
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'super_secret_key_for_simple_app')
 
-# Database configuration
-DATABASE_URL = os.environ.get('DATABASE_URL')
+# Database configuration - use persistent path on Render
+DB_PATH = os.environ.get('DB_PATH', 'prop_bets.db')
+
+def init_db():
+    """Initialize database if it doesn't exist"""
+    if not os.path.exists(DB_PATH):
+        conn = sqlite3.connect(DB_PATH)
+        with open('schema.sql', 'r') as f:
+            conn.executescript(f.read())
+        conn.commit()
+        conn.close()
 
 def get_db_connection():
-    if DATABASE_URL:
-        # Production: Use PostgreSQL
-        import psycopg2
-        from psycopg2.extras import RealDictCursor
-        conn = psycopg2.connect(DATABASE_URL)
-        conn.cursor_factory = RealDictCursor
-        return conn
-    else:
-        # Local development: Use SQLite
-        conn = sqlite3.connect('prop_bets.db')
-        conn.row_factory = sqlite3.Row
-        return conn
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+# Initialize database on startup
+init_db()
 
 @app.route('/')
 def index():
