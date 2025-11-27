@@ -86,6 +86,19 @@ def admin():
                 flash('Prop resolved!')
             conn.commit()
             
+        elif action == 'edit_prop':
+            prop_id = request.form['prop_id']
+            description = request.form['description']
+            conn.execute('UPDATE props SET description = ? WHERE id = ?', (description, prop_id))
+            conn.commit()
+            flash('Prop updated!')
+            
+        elif action == 'delete_prop':
+            prop_id = request.form['prop_id']
+            conn.execute('DELETE FROM props WHERE id = ?', (prop_id,))
+            conn.commit()
+            flash('Prop deleted!')
+            
         elif action == 'delete_game':
              game_id = request.form['game_id']
              conn.execute('DELETE FROM games WHERE id = ?', (game_id,))

@@ -20,11 +20,6 @@
         <strong>{{ game.home_team }} vs {{ game.away_team }}</strong>
         <br>
         <small>{{ game.game_date }} | {{ game.status }}</small>
-        <form method="post" style="display:inline; float:right;">
-            <input type="hidden" name="action" value="delete_game">
-            <input type="hidden" name="game_id" value="{{ game['id'] }}">
-            <button type="submit" class="outline contrast" style="padding: 2px 10px; font-size: 0.8em;">Delete</button>
-        </form>
     </header>
 
     <!-- Add Prop Form -->
@@ -38,45 +33,45 @@
     </form>
 
     <!-- List Existing Props for Resolution -->
-    <table role="grid">
-        <thead>
-            <tr>
-                <th>Prop</th>
-                <th>Result</th>
-                <th>Action</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for prop in props %}
-            {% if prop['home_team'] == game['home_team'] and prop['away_team'] == game['away_team'] %}
-            <tr>
-                <td>{{ prop['description'] }}</td>
-                <td>
-                    {% if prop['result'] %}
-                    <strong>{{ prop['result'] }}</strong>
-                    {% else %}
-                    <em>Pending</em>
-                    {% endif %}
-                </td>
-                <td>
-                    <form method="post" style="margin:0;">
-                        <input type="hidden" name="action" value="resolve_prop">
-                        <input type="hidden" name="prop_id" value="{{ prop['id'] }}">
-                        <div style="display: flex; gap: 0.25rem;">
-                            <button type="submit" name="result" value="Yes"
-                                style="background-color: green; border-color: green; padding: 0.25rem 0.5rem; font-size: 0.75rem; flex: 1;">Yes</button>
-                            <button type="submit" name="result" value="No"
-                                style="background-color: red; border-color: red; padding: 0.25rem 0.5rem; font-size: 0.75rem; flex: 1;">No</button>
-                            <button type="submit" name="result" value="Reset" class="outline"
-                                style="padding: 0.25rem 0.5rem; font-size: 0.75rem; flex: 1;">Reset</button>
-                        </div>
-                    </form>
-                </td>
-            </tr>
-            {% endif %}
-            {% endfor %}
-        </tbody>
-    </table>
+    {% for prop in props %}
+    {% if prop['home_team'] == game['home_team'] and prop['away_team'] == game['away_team'] %}
+    <div
+        style="border: 1px solid var(--muted-border-color); padding: 1rem; margin-bottom: 1rem; border-radius: 0.25rem;">
+        <!-- Prop Description -->
+        <strong style="display: block; margin-bottom: 0.75rem; font-size: 1.1rem;">{{ prop['description'] }}</strong>
+
+        <!-- Controls Row: Result + Actions -->
+        <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+            <div style="min-width: 100px;">
+                <strong>Result:</strong>
+                {% if prop['result'] %}
+                <span style="color: var(--primary);">{{ prop['result'] }}</span>
+                {% else %}
+                <em style="color: var(--muted-color);">Pending</em>
+                {% endif %}
+            </div>
+            <div style="display: flex; gap: 0.5rem; flex: 1; justify-content: flex-end;">
+                <form method="post" style="margin:0; display: contents;">
+                    <input type="hidden" name="action" value="resolve_prop">
+                    <input type="hidden" name="prop_id" value="{{ prop['id'] }}">
+                    <button type="submit" name="result" value="Yes"
+                        style="background-color: green; border-color: green; padding: 0.25rem 0.75rem; font-size: 0.875rem; margin: 0;">Yes</button>
+                    <button type="submit" name="result" value="No"
+                        style="background-color: red; border-color: red; padding: 0.25rem 0.75rem; font-size: 0.875rem; margin: 0;">No</button>
+                    <button type="submit" name="result" value="Reset" class="outline"
+                        style="padding: 0.25rem 0.75rem; font-size: 0.875rem; margin: 0;">Reset</button>
+                </form>
+                <form method="post" style="margin:0;">
+                    <input type="hidden" name="action" value="delete_prop">
+                    <input type="hidden" name="prop_id" value="{{ prop['id'] }}">
+                    <button type="submit" class="outline contrast"
+                        style="padding: 0.25rem 0.75rem; font-size: 0.875rem; margin: 0;">Delete</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    {% endfor %}
 </article>
 {% endfor %}
 {% endfor %}
