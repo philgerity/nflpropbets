@@ -1,15 +1,27 @@
 from flask import Flask, render_template, request, redirect, url_for, flash
 import sqlite3
+import os
 from espn_sync import sync_games
 
 app = Flask(__name__)
-app.secret_key = 'super_secret_key_for_simple_app'
-DB_NAME = 'prop_bets.db'
+app.secret_key = os.environ.get('SECRET_KEY', 'super_secret_key_for_simple_app')
+
+# Database configuration
+DATABASE_URL = os.environ.get('DATABASE_URL')
 
 def get_db_connection():
-    conn = sqlite3.connect(DB_NAME)
-    conn.row_factory = sqlite3.Row
-    return conn
+    if DATABASE_URL:
+        # Production: Use PostgreSQL
+        import psycopg2
+        from psycopg2.extras import RealDictCursor
+        conn = psycopg2.connect(DATABASE_URL)
+        conn.cursor_factory = RealDictCursor
+        return conn
+    else:
+        # Local development: Use SQLite
+        conn = sqlite3.connect('prop_bets.db')
+        conn.row_factory = sqlite3.Row
+        return conn
 
 @app.route('/')
 def index():
