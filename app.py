@@ -25,7 +25,10 @@ def init_db():
                 WHERE table_name = 'users'
             );
         """)
-        if not cur.fetchone()[0]:
+        result = cur.fetchone()
+        # RealDictCursor returns dict-like objects, access by key
+        table_exists = result['exists'] if isinstance(result, dict) else result[0]
+        if not table_exists:
             # Tables don't exist, create them
             with open('schema_postgres.sql', 'r') as f:
                 cur.execute(f.read())
