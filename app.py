@@ -1,27 +1,58 @@
 from flask import Flask, render_template, request, redirect, url_for, flash
-import sqlite3
+import psycopg2
+import psycopg2.extras
 import os
 from espn_sync import sync_games
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'super_secret_key_for_simple_app')
 
-# Database configuration - use persistent path on Render
-DB_PATH = os.environ.get('DB_PATH', 'prop_bets.db')
+# Database configuration - support both PostgreSQL (production) and SQLite (local dev)
+DATABASE_URL = os.environ.get('DATABASE_URL')
+USE_POSTGRES = DATABASE_URL is not None
+DB_PATH = os.environ.get('DB_PATH', 'prop_bets.db')  # Fallback for local SQLite
 
 def init_db():
     """Initialize database if it doesn't exist"""
-    if not os.path.exists(DB_PATH):
-        conn = sqlite3.connect(DB_PATH)
-        with open('schema.sql', 'r') as f:
-            conn.executescript(f.read())
-        conn.commit()
+    if USE_POSTGRES:
+        # PostgreSQL: Check if tables exist, create if needed
+        conn = get_db_connection()
+        cur = conn.cursor()
+        # Check if users table exists
+        cur.execute("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_name = 'users'
+            );
+        """)
+        if not cur.fetchone()[0]:
+            # Tables don't exist, create them
+            with open('schema_postgres.sql', 'r') as f:
+                cur.execute(f.read())
+            conn.commit()
+        cur.close()
         conn.close()
+    else:
+        # SQLite: For local development
+        import sqlite3
+        if not os.path.exists(DB_PATH):
+            conn = sqlite3.connect(DB_PATH)
+            with open('schema.sql', 'r') as f:
+                conn.executescript(f.read())
+            conn.commit()
+            conn.close()
 
 def get_db_connection():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    if USE_POSTGRES:
+        conn = psycopg2.connect(DATABASE_URL)
+        conn.cursor_factory = psycopg2.extras.RealDictCursor
+        return conn
+    else:
+        # SQLite: For local development
+        import sqlite3
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        return conn
 
 # Initialize database on startup
 init_db()
@@ -29,7 +60,10 @@ init_db()
 @app.route('/')
 def index():
     conn = get_db_connection()
-    games = conn.execute('SELECT * FROM games ORDER BY game_date').fetchall()
+    cur = conn.cursor()
+    cur.execute('SELECT * FROM games ORDER BY game_date')
+    games = cur.fetchall()
+    cur.close()
     conn.close()
     
     # Group games by day of week
@@ -77,14 +111,16 @@ def sync_route():
 @app.route('/admin', methods=('GET', 'POST'))
 def admin():
     conn = get_db_connection()
+    cur = conn.cursor()
     
     if request.method == 'POST':
         action = request.form.get('action')
+        placeholder = '%s' if USE_POSTGRES else '?'
         
         if action == 'add_prop':
             game_id = request.form['game_id']
             description = request.form['description']
-            conn.execute('INSERT INTO props (game_id, description) VALUES (?, ?)',
+            cur.execute(f'INSERT INTO props (game_id, description) VALUES ({placeholder}, {placeholder})',
                          (game_id, description))
             conn.commit()
             flash('Prop added!')
@@ -94,40 +130,42 @@ def admin():
             result = request.form['result']
             # If reset, set to NULL, otherwise set to Yes/No
             if result == 'Reset':
-                conn.execute('UPDATE props SET result = NULL WHERE id = ?', (prop_id,))
+                cur.execute(f'UPDATE props SET result = NULL WHERE id = {placeholder}', (prop_id,))
                 flash('Prop reset to pending!')
             else:
-                conn.execute('UPDATE props SET result = ? WHERE id = ?', (result, prop_id))
+                cur.execute(f'UPDATE props SET result = {placeholder} WHERE id = {placeholder}', (result, prop_id))
                 flash('Prop resolved!')
             conn.commit()
             
         elif action == 'edit_prop':
             prop_id = request.form['prop_id']
             description = request.form['description']
-            conn.execute('UPDATE props SET description = ? WHERE id = ?', (description, prop_id))
+            cur.execute(f'UPDATE props SET description = {placeholder} WHERE id = {placeholder}', (description, prop_id))
             conn.commit()
             flash('Prop updated!')
             
         elif action == 'delete_prop':
             prop_id = request.form['prop_id']
-            conn.execute('DELETE FROM props WHERE id = ?', (prop_id,))
+            cur.execute(f'DELETE FROM props WHERE id = {placeholder}', (prop_id,))
             conn.commit()
             flash('Prop deleted!')
             
         elif action == 'delete_game':
              game_id = request.form['game_id']
-             conn.execute('DELETE FROM games WHERE id = ?', (game_id,))
+             cur.execute(f'DELETE FROM games WHERE id = {placeholder}', (game_id,))
              conn.commit()
              flash('Game deleted')
 
-    games = conn.execute('SELECT * FROM games ORDER BY game_date').fetchall()
+    cur.execute('SELECT * FROM games ORDER BY game_date')
+    games = cur.fetchall()
     
-    props = conn.execute('''
+    cur.execute('''
         SELECT props.id, props.description, props.result, games.home_team, games.away_team 
         FROM props 
         JOIN games ON props.game_id = games.id
         ORDER BY games.game_date
-    ''').fetchall()
+    ''')
+    props = cur.fetchall()
     
     # Group games by day of week (same logic as index)
     from collections import defaultdict
@@ -144,47 +182,60 @@ def admin():
     day_order = {'Thu': 1, 'Fri': 2, 'Sat': 3, 'Sun': 4, 'Mon': 5, 'Tue': 6, 'Wed': 7}
     sorted_days = sorted(games_by_day.keys(), key=lambda x: day_order.get(x, 99))
     
+    cur.close()
     conn.close()
     return render_template('admin.html', games_by_day=games_by_day, sorted_days=sorted_days, props=props)
 
 @app.route('/admin/users', methods=('GET', 'POST'))
 def manage_users():
     conn = get_db_connection()
+    cur = conn.cursor()
+    placeholder = '%s' if USE_POSTGRES else '?'
     
     if request.method == 'POST':
         if 'add_user' in request.form:
             name = request.form['name']
             if name:
                 try:
-                    conn.execute('INSERT INTO users (name) VALUES (?)', (name,))
+                    cur.execute(f'INSERT INTO users (name) VALUES ({placeholder})', (name,))
                     conn.commit()
                     flash(f'User {name} added.')
-                except sqlite3.IntegrityError:
+                except (psycopg2.IntegrityError if USE_POSTGRES else __import__('sqlite3').IntegrityError):
+                    conn.rollback()
                     flash('User already exists.')
         elif 'delete_user' in request.form:
             user_id = request.form['user_id']
-            conn.execute('DELETE FROM users WHERE id = ?', (user_id,))
+            cur.execute(f'DELETE FROM users WHERE id = {placeholder}', (user_id,))
             conn.commit()
             flash('User deleted.')
             
-    users = conn.execute('SELECT * FROM users').fetchall()
+    cur.execute('SELECT * FROM users')
+    users = cur.fetchall()
+    cur.close()
     conn.close()
     return render_template('users.html', users=users)
 
 @app.route('/game/<int:game_id>')
 def game(game_id):
     conn = get_db_connection()
-    game = conn.execute('SELECT * FROM games WHERE id = ?', (game_id,)).fetchone()
-    props = conn.execute('SELECT * FROM props WHERE game_id = ?', (game_id,)).fetchall()
-    users = conn.execute('SELECT * FROM users').fetchall()
+    cur = conn.cursor()
+    placeholder = '%s' if USE_POSTGRES else '?'
+    
+    cur.execute(f'SELECT * FROM games WHERE id = {placeholder}', (game_id,))
+    game = cur.fetchone()
+    cur.execute(f'SELECT * FROM props WHERE game_id = {placeholder}', (game_id,))
+    props = cur.fetchall()
+    cur.execute('SELECT * FROM users')
+    users = cur.fetchall()
     
     # Get bets for each prop with user information
-    bets = conn.execute('''
+    cur.execute(f'''
         SELECT bets.prop_id, bets.selection, users.name
         FROM bets
         JOIN users ON bets.user_id = users.id
-        WHERE bets.prop_id IN (SELECT id FROM props WHERE game_id = ?)
-    ''', (game_id,)).fetchall()
+        WHERE bets.prop_id IN (SELECT id FROM props WHERE game_id = {placeholder})
+    ''', (game_id,))
+    bets = cur.fetchall()
     
     # Organize bets by prop_id
     bets_by_prop = {}
@@ -194,6 +245,7 @@ def game(game_id):
             bets_by_prop[prop_id] = []
         bets_by_prop[prop_id].append({'name': bet['name'], 'selection': bet['selection']})
     
+    cur.close()
     conn.close()
     if game is None:
         return "Game not found", 404
@@ -211,19 +263,23 @@ def place_bet():
         return redirect(url_for('game', game_id=game_id))
 
     conn = get_db_connection()
+    cur = conn.cursor()
+    placeholder = '%s' if USE_POSTGRES else '?'
     
     # Check for existing bet
-    existing_bet = conn.execute('SELECT * FROM bets WHERE prop_id = ? AND user_id = ?', (prop_id, user_id)).fetchone()
+    cur.execute(f'SELECT * FROM bets WHERE prop_id = {placeholder} AND user_id = {placeholder}', (prop_id, user_id))
+    existing_bet = cur.fetchone()
     
     if existing_bet:
-        conn.execute('UPDATE bets SET selection = ? WHERE id = ?', (selection, existing_bet['id']))
+        cur.execute(f'UPDATE bets SET selection = {placeholder} WHERE id = {placeholder}', (selection, existing_bet['id']))
         flash(f'Updated bet.')
     else:
-        conn.execute('INSERT INTO bets (prop_id, user_id, selection) VALUES (?, ?, ?)',
+        cur.execute(f'INSERT INTO bets (prop_id, user_id, selection) VALUES ({placeholder}, {placeholder}, {placeholder})',
                      (prop_id, user_id, selection))
         flash(f'Bet placed!')
     
     conn.commit()
+    cur.close()
     conn.close()
     
     return redirect(url_for('game', game_id=game_id))
@@ -231,21 +287,24 @@ def place_bet():
 @app.route('/leaderboard')
 def leaderboard():
     conn = get_db_connection()
+    cur = conn.cursor()
     
     # Updated query to join users table
-    results = conn.execute('''
+    cur.execute('''
         SELECT users.name, bets.selection, props.result
         FROM bets
         JOIN props ON bets.prop_id = props.id
         JOIN users ON bets.user_id = users.id
         WHERE props.result IS NOT NULL
-    ''').fetchall()
+    ''')
+    results = cur.fetchall()
     
     scores = {}
     total_bets = {}
     
     # Initialize all users with 0
-    all_users = conn.execute('SELECT name FROM users').fetchall()
+    cur.execute('SELECT name FROM users')
+    all_users = cur.fetchall()
     for user_row in all_users:
         scores[user_row['name']] = 0
         total_bets[user_row['name']] = 0
@@ -269,6 +328,7 @@ def leaderboard():
     
     leaderboard_data.sort(key=lambda x: x['score'], reverse=True)
     
+    cur.close()
     conn.close()
     return render_template('leaderboard.html', leaderboard=leaderboard_data)
 

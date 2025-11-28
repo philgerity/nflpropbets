@@ -1,12 +1,19 @@
 import requests
 from datetime import datetime
 import dateutil.parser
+import os
 
 def sync_games(conn):
+    # Check if using PostgreSQL or SQLite
+    USE_POSTGRES = os.environ.get('DATABASE_URL') is not None
+    placeholder = '%s' if USE_POSTGRES else '?'
+    
     url = "http://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
     try:
         response = requests.get(url)
         data = response.json()
+        
+        cur = conn.cursor()
         
         events = data.get('events', [])
         for event in events:
@@ -45,24 +52,25 @@ def sync_games(conn):
                     away_score = score
             
             # Check if game exists
-            cur = conn.execute('SELECT id FROM games WHERE espn_id = ?', (espn_id,))
+            cur.execute(f'SELECT id FROM games WHERE espn_id = {placeholder}', (espn_id,))
             row = cur.fetchone()
             
             if row:
                 # Update
-                conn.execute('''
+                cur.execute(f'''
                     UPDATE games 
-                    SET status = ?, home_score = ?, away_score = ?, game_date = ?
-                    WHERE espn_id = ?
+                    SET status = {placeholder}, home_score = {placeholder}, away_score = {placeholder}, game_date = {placeholder}
+                    WHERE espn_id = {placeholder}
                 ''', (status, home_score, away_score, formatted_date, espn_id))
             else:
                 # Insert
-                conn.execute('''
+                cur.execute(f'''
                     INSERT INTO games (espn_id, home_team, away_team, game_date, status, home_score, away_score)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder})
                 ''', (espn_id, home_team, away_team, formatted_date, status, home_score, away_score))
         
         conn.commit()
+        cur.close()
         return True, "Synced successfully"
     except Exception as e:
         return False, str(e)
